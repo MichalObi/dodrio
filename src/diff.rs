@@ -86,9 +86,29 @@ pub(crate) fn diff(
                 return;
             }
 
-            let new = cached_set.get(new.id);
-            let old = cached_set.get(old.id);
-            diff(cached_set, change_list, registry, old, new, cached_roots);
+            let (new, new_template) = cached_set.get(new.id);
+            let (old, old_template) = cached_set.get(old.id);
+            if new_template == old_template {
+                // If they are both using the same template, then just diff the
+                // subtrees.
+                diff(cached_set, change_list, registry, old, new, cached_roots);
+            } else {
+                // Otherwise, they are probably different enough that
+                // re-constructing the subtree from scratch should be faster.
+                // This doubly holds true if we have a new template.
+                if let Some(template) = new_template {
+                    create_with_template(
+                        cached_set,
+                        change_list,
+                        registry,
+                        template,
+                        new,
+                        cached_roots,
+                    );
+                } else {
+                    create(cached_set, change_list, registry, new, cached_roots);
+                }
+            }
         }
 
         // New cached node when the old node was not cached. In this scenario,
@@ -96,8 +116,19 @@ pub(crate) fn diff(
         // the subtrees, so we just create the new cached node afresh.
         (&NodeKind::Cached(ref c), _) => {
             cached_roots.push(c.id);
-            let new = cached_set.get(c.id);
-            create(cached_set, change_list, registry, new, cached_roots);
+            let (new, template) = cached_set.get(c.id);
+            if let Some(template) = template {
+                create_with_template(
+                    cached_set,
+                    change_list,
+                    registry,
+                    template,
+                    new,
+                    cached_roots,
+                );
+            } else {
+                create(cached_set, change_list, registry, new, cached_roots);
+            }
             registry.remove_subtree(&old);
             change_list.emit_replace_with();
         }
@@ -303,8 +334,60 @@ fn create(
         }
         NodeKind::Cached(c) => {
             cached_roots.push(c.id);
-            let node = cached_set.get(c.id);
-            create(cached_set, change_list, registry, node, cached_roots)
+            let (node, template) = cached_set.get(c.id);
+            if let Some(template) = template {
+                create_with_template(
+                    cached_set,
+                    change_list,
+                    registry,
+                    template,
+                    node,
+                    cached_roots,
+                );
+            } else {
+                create(cached_set, change_list, registry, node, cached_roots);
+            }
         }
     }
+}
+
+fn create_with_template(
+    cached_set: &CachedSet,
+    change_list: &mut ChangeList,
+    registry: &mut EventsRegistry,
+    template_id: CacheId,
+    node: Node,
+    cached_roots: &mut bumpalo::collections::Vec<CacheId>,
+) {
+    let (template, template_template) = cached_set.get(template_id);
+    debug_assert!(
+        template_template.is_none(),
+        "templates should not be templated themselves"
+    );
+
+    // If we haven't already created and saved the physical DOM subtree for this
+    // template, do that now.
+    if !change_list.has_template(template_id) {
+        create(
+            cached_set,
+            change_list,
+            registry,
+            template.clone(),
+            cached_roots,
+        );
+        change_list.emit_save_template(template_id);
+    }
+
+    // Clone the template and push it onto the stack.
+    change_list.emit_push_template(template_id);
+
+    // Now diff the node with its template.
+    diff(
+        cached_set,
+        change_list,
+        registry,
+        template,
+        node,
+        cached_roots,
+    );
 }

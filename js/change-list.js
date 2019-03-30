@@ -196,7 +196,23 @@ const OP_TABLE = [
     const node = top(changeList.stack);
     node.setAttributeNS(null, name, value);
     return i;
-  }
+  },
+
+  // 18
+  function saveTemplate(changeList, mem8, mem32, i) {
+    const id = mem32[i++];
+    const template = changeList.stack.pop();
+    changeList.saveTemplate(id, template);
+    return i;
+  },
+
+  // 19
+  function pushTemplate(changeList, mem8, mem32, i) {
+    const id = mem32[i++];
+    const template = changeList.getTemplate(id);
+    changeList.stack.push(template.cloneNode(true));
+    return i;
+  },
 ];
 
 // export
@@ -207,6 +223,7 @@ class ChangeList {
     this.ranges = [];
     this.stack = [];
     this.strings = new Map();
+    this.templates = new Map();
   }
 
   unmount() {
@@ -219,6 +236,7 @@ class ChangeList {
     this.ranges = null;
     this.stack = null;
     this.strings = null;
+    this.templates = null;
   }
 
   addChangeListRange(start, len) {
@@ -263,6 +281,14 @@ class ChangeList {
 
   getString(id) {
     return this.strings.get(id);
+  }
+
+  saveTemplate(id, template) {
+    this.templates.set(id, template);
+  }
+
+  getTemplate(id) {
+    return this.templates.get(id);
   }
 
   initEventsTrampoline(trampoline) {

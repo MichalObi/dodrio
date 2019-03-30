@@ -1,6 +1,6 @@
-use crate::Listener;
+use crate::{cached_set::CacheId, Listener};
 use bumpalo::Bump;
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use std::fmt;
 
 pub mod js {
@@ -70,6 +70,7 @@ struct StringsCacheEntry {
 pub(crate) struct ChangeList {
     bump: Bump,
     strings_cache: FxHashMap<String, StringsCacheEntry>,
+    templates: FxHashSet<CacheId>,
     next_string_key: u32,
     js: js::ChangeList,
     events_trampoline: Option<crate::EventsTrampoline>,
@@ -101,6 +102,7 @@ impl ChangeList {
         ChangeList {
             bump,
             strings_cache,
+            templates: Default::default(),
             next_string_key: 0,
             js,
             events_trampoline: None,
@@ -111,6 +113,10 @@ impl ChangeList {
         debug_assert!(self.events_trampoline.is_none());
         self.js.init_events_trampoline(&trampoline);
         self.events_trampoline = Some(trampoline);
+    }
+
+    pub(crate) fn has_template(&self, id: CacheId) -> bool {
+        self.templates.contains(&id)
     }
 }
 
@@ -313,6 +319,26 @@ enum ChangeDiscriminant {
     /// stack.top().setAttributeNS(String(id1), String(id2), String(id3))
     /// ```
     SetAttributeNS = 17,
+
+    /// Immediates: `(id)`
+    ///
+    /// Stack: `[... Node] -> [...]`
+    ///
+    /// ```text
+    /// template = stack.pop()
+    /// saveTemplate(id, template)
+    /// ```
+    SaveTemplate = 18,
+
+    /// Immediates: `(id)`
+    ///
+    /// Stack: `[...] -> [... Node]`
+    ///
+    /// ```text
+    /// template = getTemplate(id)
+    /// stack.push(template.cloneNode(true))
+    /// ```
+    PushTemplate = 19,
 }
 
 // Allocation utilities to ensure that we only allocation sequences of `u32`s
@@ -482,5 +508,17 @@ impl ChangeList {
         debug!("emit_remove_event_listener({:?})", event);
         let event_id = self.ensure_string(event);
         self.op1(ChangeDiscriminant::RemoveEventListener, event_id);
+    }
+
+    pub(crate) fn emit_save_template(&mut self, id: CacheId) {
+        debug!("emit_save_template({:?})", id);
+        self.templates.insert(id);
+        self.op1(ChangeDiscriminant::SaveTemplate, id.into());
+    }
+
+    pub(crate) fn emit_push_template(&mut self, id: CacheId) {
+        debug!("emit_save_template({:?})", id);
+        debug_assert!(self.has_template(id));
+        self.op1(ChangeDiscriminant::PushTemplate, id.into())
     }
 }

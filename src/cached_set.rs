@@ -1,6 +1,7 @@
 use crate::{
     events::EventsRegistry,
     node::{Node, NodeKind},
+    render_context::RenderContext,
 };
 use bumpalo::Bump;
 use fxhash::{FxHashMap, FxHashSet};
@@ -33,6 +34,28 @@ pub(crate) struct CacheEntry {
     // once, we don't have to repeat the tracing every time we want to garbage
     // collect cache entries.
     edges: FxHashSet<CacheId>,
+
+    // The template for this cached virtual subtree.
+    //
+    // When a cache entry has a template, that means that the `ChangeList` will
+    // lazily build a physical DOM subtree based on the template, and when we
+    // create new versions of this cached result, we clone the template's
+    // physical DOM subtree and then modify it, rather than building the cached
+    // result up from scratch. This is a nice win because we bounce between JS
+    // and DOM methods less often, and get the C++ DOM implementation to do most
+    // of the subtree construction for us.
+    template: Option<CacheId>,
+
+    // Whether this entry should never be garbage collected. Typically only
+    // templates are pinned.
+    pinned: bool,
+}
+
+impl From<CacheId> for u32 {
+    #[inline]
+    fn from(id: CacheId) -> u32 {
+        id.0
+    }
 }
 
 impl CachedSet {
@@ -56,7 +79,7 @@ impl CachedSet {
         }
 
         self.items.retain(|id, entry| {
-            let keep = mark_bits.contains(id);
+            let keep = entry.pinned || mark_bits.contains(id);
             if !keep {
                 debug!("CachedSet::gc: removing {:?}", id);
                 let node: &Node = unsafe { &*entry.node };
@@ -103,21 +126,37 @@ impl CachedSet {
         CacheId(ID_COUNTER.fetch_add(1, Ordering::AcqRel) as u32)
     }
 
-    pub(crate) fn insert<F>(set: &crate::RefCell<Self>, f: F) -> CacheId
+    pub(crate) fn insert<F>(
+        cx: &mut RenderContext,
+        pinned: bool,
+        template: Option<CacheId>,
+        f: F,
+    ) -> CacheId
     where
-        // It is crucial for safety that nodes can't borrow from the
-        // CachedSet. This signature would allow it.
-        F: for<'a> FnOnce(&'a Bump, &'a crate::RefCell<Self>) -> Node<'a>,
+        F: for<'b> FnOnce(&'b mut RenderContext<'b>) -> Node<'b>,
     {
+        let set = cx.cached_set;
         let bump = Bump::new();
-        let node = f(&bump, set);
-        let node = bump.alloc(node);
-        let edges = {
-            let set = set.borrow();
-            set.trace(node)
+        let (node, edges) = {
+            let mut nested_cx = RenderContext::new(&bump, cx.cached_set, cx.templates);
+            let node = f(&mut nested_cx);
+            let node = bump.alloc(node);
+            let edges = {
+                let set = set.borrow();
+                set.trace(node)
+            };
+            (
+                node as *mut Node<'_> as usize as *const Node<'static>,
+                edges,
+            )
         };
-        let node = node as *mut Node<'_> as usize as *const Node<'static>;
-        let entry = CacheEntry { bump, node, edges };
+        let entry = CacheEntry {
+            bump,
+            node,
+            edges,
+            template,
+            pinned,
+        };
 
         let mut set = set.borrow_mut();
         let id = set.next_id();
@@ -131,21 +170,14 @@ impl CachedSet {
         self.items.contains_key(&id)
     }
 
-    /// Get the node for the given cache id.
-    pub fn get(&self, mut id: CacheId) -> Node {
+    /// Get the cached node and its template (if any) for the given cache id.
+    pub fn get(&self, id: CacheId) -> (Node, Option<CacheId>) {
         debug!("CachedSet::get: id = {:?}", id);
-        loop {
-            let entry = self
-                .items
-                .get(&id)
-                .expect_throw("CachedSet::get: should have id in set");
-            let node: &Node = unsafe { &*entry.node };
-            if let NodeKind::Cached(ref c) = node.kind {
-                id = c.id;
-                continue;
-            } else {
-                return node.clone();
-            }
-        }
+        let entry = self
+            .items
+            .get(&id)
+            .expect_throw("CachedSet::get: should have id in set");
+        let node: &Node = unsafe { &*entry.node };
+        (node.clone(), entry.template)
     }
 }

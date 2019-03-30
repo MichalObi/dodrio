@@ -6,6 +6,7 @@ use std::rc::Rc;
 use wasm_bindgen::*;
 use wasm_bindgen_test::*;
 
+#[derive(Default)]
 pub struct CountRenders {
     render_count: Cell<usize>,
 }

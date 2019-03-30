@@ -1,4 +1,5 @@
 use crate::{cached_set::CacheId, Node, Render, RenderContext};
+use std::any::TypeId;
 use std::cell::Cell;
 use std::ops::{Deref, DerefMut};
 
@@ -8,6 +9,11 @@ use std::ops::{Deref, DerefMut};
 pub struct Cached<R> {
     inner: R,
     cached: Cell<Option<CacheId>>,
+}
+
+pub_unstable_internal! {
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+    pub(crate) struct TemplateId(TypeId);
 }
 
 impl<R> Cached<R> {
@@ -90,6 +96,15 @@ impl<R> Cached<R> {
     }
 }
 
+impl<R> Cached<R>
+where
+    R: 'static,
+{
+    pub(crate) fn template_id() -> TemplateId {
+        TemplateId(TypeId::of::<R>())
+    }
+}
+
 impl<R> Deref for Cached<R> {
     type Target = R;
 
@@ -106,9 +121,11 @@ impl<R> DerefMut for Cached<R> {
 
 impl<R> Render for Cached<R>
 where
-    R: Render,
+    R: 'static + Default + Render,
 {
     fn render<'a>(&self, cx: &mut RenderContext<'a>) -> Node<'a> {
+        let template = cx.template::<R>();
+
         let id = match self.cached.get() {
             // This does-the-cache-contain-this-id check is necessary because
             // the same `Cached<R>` instance can be rendered into vdom A, which
@@ -146,7 +163,7 @@ where
                 id
             }
             _ => {
-                let id = cx.cache(|nested_cx| self.inner.render(nested_cx));
+                let id = cx.cache(false, template, |nested_cx| self.inner.render(nested_cx));
                 self.cached.set(Some(id));
                 id
             }
