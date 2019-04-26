@@ -10,9 +10,13 @@ struct sortArray {
 }
 
 impl sortArray {
-    fn new(vec: Vec<u32>) -> sortArray {
-        sortArray { state: vec }
+    fn new(vec: &Vec<u32>) -> sortArray {
+        sortArray {
+            state: vec.to_vec(),
+        }
     }
+
+    fn shuffle() {}
 }
 
 #[wasm_bindgen(start)]
@@ -25,11 +29,11 @@ pub fn run() {
     let document = window.document().unwrap();
     let body = document.body().unwrap();
 
-    let mut vec = vec![1, 2, 3];
+    let vec: Vec<u32> = (0..10).collect();
 
     info!("vec {:#?}", vec);
 
-    let sort_array = sortArray::new(vec);
+    let sort_array = sortArray::new(&vec);
 
     info!("sort_array {:#?}", sort_array);
 }
