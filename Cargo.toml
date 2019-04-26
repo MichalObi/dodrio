@@ -102,4 +102,5 @@ members = [
   "./examples/moire",
   "./examples/sierpinski-triangle",
   "./examples/todomvc",
+  "./examples/bubble-sort"
 ]
