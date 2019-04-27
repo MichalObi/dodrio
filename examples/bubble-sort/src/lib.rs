@@ -2,16 +2,14 @@ use dodrio::{bumpalo, Node, Render, RenderContext, Vdom};
 use log::*;
 use wasm_bindgen::prelude::*;
 
-extern crate web_sys;
-
 #[derive(Debug)]
 struct SortArray {
     state: Vec<u32>,
 }
 
 impl SortArray {
-    fn new(vec: Vec<u32>) -> SortArray {
-        SortArray { state: vec }
+    fn new(state: Vec<u32>) -> SortArray {
+        SortArray { state }
     }
 }
 
@@ -20,7 +18,7 @@ impl Render for SortArray {
     fn render<'a>(&self, cx: &mut RenderContext<'a>) -> Node<'a> {
         use dodrio::builder::{li, text, ul};
 
-        let mut sort_items = bumpalo::collections::Vec::with_capacity_in(10, cx.bump);
+        let mut sort_items = bumpalo::collections::Vec::with_capacity_in(self.state.len(), cx.bump);
 
         for number in &self.state {
             let number_as_string = bumpalo::format!(in cx.bump, "{}", number).into_bump_str();
