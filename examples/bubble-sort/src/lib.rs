@@ -1,4 +1,4 @@
-use dodrio::{bumpalo, Render, RenderContext};
+use dodrio::{bumpalo, Node, Render, RenderContext, Vdom};
 use log::*;
 use wasm_bindgen::prelude::*;
 
@@ -12,6 +12,14 @@ struct SortArray {
 impl SortArray {
     fn new(vec: Vec<u32>) -> SortArray {
         SortArray { state: vec }
+    }
+}
+
+/// The rendering implementation for our SortArray
+impl Render for SortArray {
+    fn render<'a>(&self, cx: &mut RenderContext<'a>) -> Node<'a> {
+        use dodrio::builder::*;
+        div(&cx).finish()
     }
 }
 
@@ -29,4 +37,11 @@ pub fn run() {
     let sort_array = SortArray::new(vec);
 
     info!("sort_array {:#?}", sort_array);
+
+    let vdom = Vdom::new(body.as_ref(), sort_array);
+
+    info!("vdom for sort {:#?}", vdom);
+
+    // Run the virtual DOM forever and don't unmount it.
+    vdom.forget();
 }
