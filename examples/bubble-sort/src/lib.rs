@@ -5,18 +5,14 @@ use wasm_bindgen::prelude::*;
 extern crate web_sys;
 
 #[derive(Debug)]
-struct sortArray {
+struct SortArray {
     state: Vec<u32>,
 }
 
-impl sortArray {
-    fn new(vec: &Vec<u32>) -> sortArray {
-        sortArray {
-            state: vec.to_vec(),
-        }
+impl SortArray {
+    fn new(vec: Vec<u32>) -> SortArray {
+        SortArray { state: vec }
     }
-
-    fn shuffle() {}
 }
 
 #[wasm_bindgen(start)]
@@ -29,11 +25,8 @@ pub fn run() {
     let document = window.document().unwrap();
     let body = document.body().unwrap();
 
-    let vec: Vec<u32> = (0..10).collect();
-
-    info!("vec {:#?}", vec);
-
-    let sort_array = sortArray::new(&vec);
+    let vec: Vec<u32> = vec![1, 9, 3, 2, 4, 6, 7, 5, 0, 8];
+    let sort_array = SortArray::new(vec);
 
     info!("sort_array {:#?}", sort_array);
 }
