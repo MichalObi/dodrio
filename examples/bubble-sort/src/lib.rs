@@ -11,12 +11,18 @@ impl SortArray {
     fn new(state: Vec<u32>) -> SortArray {
         SortArray { state }
     }
+
+    fn sort(&mut self) {
+        info!("Start sorting !")
+    }
 }
 
 /// The rendering implementation for our SortArray
 impl Render for SortArray {
     fn render<'a>(&self, cx: &mut RenderContext<'a>) -> Node<'a> {
-        use dodrio::builder::{li, text, ul};
+        info!("cx: {:#?}", &cx);
+
+        use dodrio::builder::{button, div, li, text, ul};
 
         let mut sort_items = bumpalo::collections::Vec::with_capacity_in(self.state.len(), cx.bump);
 
@@ -27,7 +33,19 @@ impl Render for SortArray {
 
         // info!("sort_items: {:#?}", sort_items);
 
-        ul(&cx).children(sort_items).finish()
+        div(&cx)
+            .children([
+                ul(&cx).children(sort_items).finish(),
+                button(&cx)
+                    .on("click", |root, vdom, _event| {
+                        let sort_array = root.unwrap_mut::<SortArray>();
+                        sort_array.sort();
+                        vdom.schedule_render();
+                    })
+                    .children([text("Sort")])
+                    .finish(),
+            ])
+            .finish()
     }
 }
 
