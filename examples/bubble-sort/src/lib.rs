@@ -13,7 +13,17 @@ impl SortArray {
     }
 
     fn sort(&mut self) {
-        info!("Start sorting !")
+        let len = self.state.len();
+
+        for i in 0..len - 1 {
+            let last = len - i - 1;
+
+            for j in 0..last {
+                if self.state[j] > self.state[j + 1] {
+                    self.state.swap(j, j + 1)
+                }
+            }
+        }
     }
 }
 
@@ -40,7 +50,7 @@ impl Render for SortArray {
                     .on("click", |root, vdom, _event| {
                         let sort_array = root.unwrap_mut::<SortArray>();
                         sort_array.sort();
-                        vdom.schedule_render();
+                        vdom.schedule_render(); // should be invoke after sort (?)
                     })
                     .children([text("Sort")])
                     .finish(),
