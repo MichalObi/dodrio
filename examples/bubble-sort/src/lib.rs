@@ -1,4 +1,4 @@
-use dodrio::{bumpalo, Node, Render, RenderContext, Vdom};
+use dodrio::{bumpalo, Node, Render, RenderContext, Vdom, VdomWeak};
 use log::*;
 use wasm_bindgen::prelude::*;
 
@@ -12,16 +12,24 @@ impl SortArray {
         SortArray { state }
     }
 
-    fn sort(&mut self) {
+    fn sort(&mut self, vdom: &VdomWeak) {
         let len = self.state.len();
+        let mut swapped;
 
         for i in 0..len - 1 {
             let last = len - i - 1;
+            swapped = false;
 
             for j in 0..last {
                 if self.state[j] > self.state[j + 1] {
-                    self.state.swap(j, j + 1)
+                    self.state.swap(j, j + 1);
+                    swapped = true;
                 }
+            }
+
+            if swapped == false {
+                vdom.schedule_render();
+                break;
             }
         }
     }
@@ -44,13 +52,13 @@ impl Render for SortArray {
         // info!("sort_items: {:#?}", sort_items);
 
         div(&cx)
+            .attr("class", "sort-wrapper")
             .children([
                 ul(&cx).children(sort_items).finish(),
                 button(&cx)
                     .on("click", |root, vdom, _event| {
                         let sort_array = root.unwrap_mut::<SortArray>();
-                        sort_array.sort();
-                        vdom.schedule_render(); // should be invoke after sort (?)
+                        sort_array.sort(&vdom);
                     })
                     .children([text("Sort")])
                     .finish(),
